@@ -1,14 +1,11 @@
 from typing import Tuple, TypeVar, Any
 
-import numpy as np
 from numba import prange
 from numba import njit as _njit
 
 from .autodiff import Context
 from .tensor import Tensor
 from .tensor_data import (
-    MAX_DIMS,
-    Index,
     Shape,
     Strides,
     Storage,
@@ -22,6 +19,7 @@ Fn = TypeVar("Fn")
 
 
 def njit(fn: Fn, **kwargs: Any) -> Fn:
+    """Decorator to JIT compile functions with NUMBA."""
     return _njit(inline="always", **kwargs)(fn)  # type: ignore
 
 
@@ -140,6 +138,18 @@ class Conv1dFun(Function):
 
     @staticmethod
     def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, Tensor]:
+        """Compute gradients for 1D Convolution
+
+        Args:
+        ----
+            ctx : Context
+            grad_output : batch x out_channel x h x w
+
+        Returns:
+        -------
+            Tuple of (grad_input, grad_weight)
+
+        """
         input, weight = ctx.saved_values
         batch, in_channels, w = input.shape
         out_channels, in_channels, kw = weight.shape
@@ -247,8 +257,12 @@ def _tensor_conv2d(
                                 ih = oh - kh_ if reverse else oh + kh_
                                 iw = ow - kw_ if reverse else ow + kw_
                                 if 0 <= ih < height and 0 <= iw < width:
-                                    in_val = input[b * s10 + ic * s11 + ih * s12 + iw * s13]
-                                    w_val = weight[oc * s20 + ic * s21 + kh_ * s22 + kw_ * s23]
+                                    in_val = input[
+                                        b * s10 + ic * s11 + ih * s12 + iw * s13
+                                    ]
+                                    w_val = weight[
+                                        oc * s20 + ic * s21 + kh_ * s22 + kw_ * s23
+                                    ]
                                     acc += in_val * w_val
                     out[b * s30 + oc * s31 + oh * s32 + ow * s33] = acc
 
@@ -284,6 +298,18 @@ class Conv2dFun(Function):
 
     @staticmethod
     def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, Tensor]:
+        """Compute gradients for 2D Convolution
+
+        Args:
+        ----
+            ctx : Context
+            grad_output : batch x out_channel x h x w
+
+        Returns:
+        -------
+            Tuple of (grad_input, grad_weight)
+
+        """
         input, weight = ctx.saved_values
         batch, in_channels, h, w = input.shape
         out_channels, in_channels, kh, kw = weight.shape
