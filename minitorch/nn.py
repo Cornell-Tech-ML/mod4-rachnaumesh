@@ -89,15 +89,15 @@ class Max(Function):
     def forward(ctx: Context, input: Tensor, dim: Tensor) -> Tensor:
         """Compute the max along a dimension"""
         output = input.f.max_reduce(input, int(dim.item()))
-        ctx.save_for_backward(input, dim)
+        mask = input.f.eq_zip(input, output)
+        ctx.save_for_backward(mask)
         return output
     
     @staticmethod
-    def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, None]:
+    def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, float]:
         """Compute the gradient of the max"""
-        input, dim = ctx.saved_values
-        mask = input.f.eq_zip(input, input.f.max_reduce(input, int(dim.item())))
-        return grad_output * mask, None
+        (mask,) = ctx.saved_values
+        return mask * grad_output, 0.0
 
 
 def max(input: Tensor, dim: int) -> Tensor:
@@ -132,11 +132,8 @@ def softmax(input: Tensor, dim: int) -> Tensor:
         Tensor: softmax tensor
     """
     # Subtract max for numerical stability
-    max_vals = max(input, dim)
-    shifted = input - max_vals
-    exp_vals = shifted.exp()
-    sum_exp = exp_vals.sum(dim)
-    return exp_vals / sum_exp
+    out = input.exp()
+    return out / (out.sum(dim))
 
 def logsoftmax(input: Tensor, dim: int) -> Tensor:
     """
