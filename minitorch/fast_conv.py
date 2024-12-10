@@ -254,8 +254,12 @@ def _tensor_conv2d(
                     for ic in prange(in_channels):
                         for kh_ in prange(kh):
                             for kw_ in prange(kw):
-                                ih = oh - kh_ if reverse else oh + kh_
-                                iw = ow - kw_ if reverse else ow + kw_
+                                if reverse:
+                                    ih = oh + kh_ - kh + 1
+                                    iw = ow + kw_ - kw + 1
+                                else:
+                                    ih = oh + kh_
+                                    iw = ow + kw_
                                 if 0 <= ih < height and 0 <= iw < width:
                                     in_val = input[
                                         b * s10 + ic * s11 + ih * s12 + iw * s13

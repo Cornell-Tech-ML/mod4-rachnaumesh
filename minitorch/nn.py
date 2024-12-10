@@ -196,10 +196,6 @@ def dropout(input: Tensor, p: float, ignore: bool = False) -> Tensor:
         return input
 
     if p == 1.0:
-        return input * 0.0
+        return input.zeros()
 
-    # Create dropout mask
-    mask = rand(input.shape) > p
-    # Scale the output by 1/(1-p) to maintain expected value
-    scale = 1.0 / (1.0 - p)
-    return input * mask * scale
+    return input * (rand(input.shape, backend=input.backend, requires_grad=False) > p)
