@@ -35,7 +35,7 @@ class Conv1d(minitorch.Module):
 
     def forward(self, input):
         # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        return minitorch.conv1d(input, self.weights.value) + self.bias.value
 
 
 class CNNSentimentKim(minitorch.Module):
@@ -62,14 +62,36 @@ class CNNSentimentKim(minitorch.Module):
         super().__init__()
         self.feature_map_size = feature_map_size
         # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        self.dropout = dropout
+        self.conv1 = Conv1d(embedding_size, feature_map_size, filter_sizes[0])
+        self.conv2 = Conv1d(embedding_size, feature_map_size, filter_sizes[1])
+        self.conv3 = Conv1d(embedding_size, feature_map_size, filter_sizes[2])
+        self.fc = Linear(feature_map_size, 1)
 
     def forward(self, embeddings):
         """
         embeddings tensor: [batch x sentence length x embedding dim]
         """
         # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        # Apply each convolution followed by ReLU
+        x = embeddings.permute(0, 2, 1)
+        conv1_out = self.conv1(x).relu()
+        conv2_out = self.conv2(x).relu()
+        conv3_out = self.conv3(x).relu()
+
+        # 2. Apply max-over-time pooling for each feature map
+        pool1 = minitorch.max(conv1_out, 2)
+        pool2 = minitorch.max(conv2_out, 2)
+        pool3 = minitorch.max(conv3_out, 2)
+
+        # Concatenate the pooled features
+        pooled = pool1 + pool2 + pool3
+        pooled = pooled.view(pooled.shape[0], pooled.shape[1])
+
+        out = self.fc(pooled)
+        out = minitorch.dropout(out, self.dropout, ignore=not self.training)
+
+        return out.sigmoid().view(x.shape[0])
 
 
 # Evaluation helper methods
@@ -95,7 +117,6 @@ def get_accuracy(predictions_array):
 
 best_val = 0.0
 
-
 def default_log_fn(
     epoch,
     train_loss,
@@ -104,16 +125,26 @@ def default_log_fn(
     train_accuracy,
     validation_predictions,
     validation_accuracy,
+    log_file=None
 ):
     global best_val
     best_val = (
         best_val if best_val > validation_accuracy[-1] else validation_accuracy[-1]
     )
-    print(f"Epoch {epoch}, loss {train_loss}, train accuracy: {train_accuracy[-1]:.2%}")
-    if len(validation_predictions) > 0:
-        print(f"Validation accuracy: {validation_accuracy[-1]:.2%}")
-        print(f"Best Valid accuracy: {best_val:.2%}")
 
+    # Create log message
+    log_message = f"Epoch {epoch}, loss {train_loss:.4f}, train accuracy: {train_accuracy[-1]:.2%}"
+    if len(validation_predictions) > 0:
+        log_message += f"\nValidation accuracy: {validation_accuracy[-1]:.2%}"
+        log_message += f"\nBest Valid accuracy: {best_val:.2%}"
+
+    # Print to console
+    print(log_message)
+
+    # Save to file if provided
+    if log_file:
+        log_file.write(log_message + "\n")
+        log_file.flush()
 
 class SentenceSentimentTrain:
     def __init__(self, model):
@@ -127,6 +158,7 @@ class SentenceSentimentTrain:
         max_epochs=500,
         data_val=None,
         log_fn=default_log_fn,
+        log_file=None
     ):
         model = self.model
         (X_train, y_train) = data_train
@@ -193,6 +225,7 @@ class SentenceSentimentTrain:
                 train_accuracy,
                 validation_predictions,
                 validation_accuracy,
+                log_file=log_file
             )
             total_loss = 0.0
 
@@ -256,7 +289,7 @@ if __name__ == "__main__":
     train_size = 450
     validation_size = 100
     learning_rate = 0.01
-    max_epochs = 250
+    max_epochs = 50
 
     (X_train, y_train), (X_val, y_val) = encode_sentiment_data(
         load_dataset("glue", "sst2"),
@@ -264,12 +297,15 @@ if __name__ == "__main__":
         train_size,
         validation_size,
     )
-    model_trainer = SentenceSentimentTrain(
-        CNNSentimentKim(feature_map_size=100, filter_sizes=[3, 4, 5], dropout=0.25)
-    )
-    model_trainer.train(
-        (X_train, y_train),
-        learning_rate,
-        max_epochs=max_epochs,
-        data_val=(X_val, y_val),
-    )
+
+    with open("sentiment_logs.txt", "w") as log_file:
+        model_trainer = SentenceSentimentTrain(
+            CNNSentimentKim(feature_map_size=100, filter_sizes=[3, 4, 5], dropout=0.25)
+        )
+        model_trainer.train(
+            (X_train, y_train),
+            learning_rate,
+            max_epochs=max_epochs,
+            data_val=(X_val, y_val),
+            log_file=log_file,
+        )
